@@ -40,7 +40,7 @@ export default function MonitoringBanner({ m }: { m: Monitoring | null }) {
         />
         <Card
           label="Retard moyen"
-          value={m.mean_delay_min != null ? `${m.mean_delay_min} min` : "—"}
+          value={m.mean_delay_min != null ? `${m.mean_delay_min} min` : "n/d"}
           hint="Écart moyen entre l'heure prévue et l'heure réelle, tous vols confondus."
         />
         <Card

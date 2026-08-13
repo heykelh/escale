@@ -2,7 +2,7 @@ import Nav from "@/components/Nav";
 import { getRgpdTraitements, getDpiaCriteres } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "ESCALE — Registre RGPD" };
+export const metadata = { title: "ESCALE, Registre RGPD" };
 
 const field = (label: string, value: string) => (
   <div className="reg-row"><span className="reg-label">{label}</span><span className="reg-value">{value}</span></div>
@@ -71,7 +71,7 @@ export default async function RgpdPage() {
             <strong>Conclusion :</strong> le traitement actif ne remplit que {remplis} critère sur 9
             (usage innovant) et ne porte sur aucune donnée personnelle. Une AIPD n'est donc pas
             requise en l'état. Elle deviendrait obligatoire si le traitement projeté (données
-            d'équipage) était activé — réévaluation nécessaire avant toute mise en œuvre.
+            d'équipage) était activé, réévaluation nécessaire avant toute mise en œuvre.
           </div>
         </section>
 

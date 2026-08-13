@@ -17,7 +17,7 @@ export default function Nav({ active }: { active: string }) {
           <span className="brand-mark" />
           <span className="brand-text">
             <span className="brand-name">ESCALE</span>
-            <span className="brand-tagline">Suivi des vols &amp; retards — CDG / Orly</span>
+            <span className="brand-tagline">Suivi des vols &amp; retards, CDG / Orly</span>
           </span>
         </Link>
         <nav className="nav">

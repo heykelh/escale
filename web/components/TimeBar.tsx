@@ -28,7 +28,7 @@ export default function TimeBar() {
       <div className="timebar-left">
         <span className="tb-dot" />
         <span className="tb-label">Heure de référence</span>
-        <span className="tb-date">{p ? p.date : "—"}</span>
+        <span className="tb-date">{p ? p.date : "n/d"}</span>
       </div>
       <div className="timebar-right">
         <span className="tb-clock">{p ? p.paris : "--:--:--"}</span>

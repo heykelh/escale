@@ -2,7 +2,7 @@ import Link from "next/link";
 import Nav from "@/components/Nav";
 
 export const metadata = {
-  title: "ESCALE — À propos",
+  title: "ESCALE, À propos",
   description: "Ce que fait ESCALE, comment il fonctionne, et sur quoi il repose.",
 };
 
@@ -26,7 +26,7 @@ export default function AProposPage() {
             <h3>Estimer le risque de retard de chaque vol</h3>
             <p>Le site récupère plusieurs fois par jour la liste des vols de Roissy et d'Orly, avec
             leur heure prévue et leur heure réelle. Pour chaque vol, il calcule une note de risque
-            en trois niveaux — faible, modéré, élevé — à partir de trois critères lisibles : saturation
+            en trois niveaux, faible, modéré, élevé, à partir de trois critères lisibles : saturation
             de l'aéroport sur le créneau, heure de pointe, et tendance de la liaison à être en retard.</p>
           </div></div>
 
@@ -57,7 +57,7 @@ export default function AProposPage() {
           public de données aériennes, accessible via RapidAPI). Pour chaque aéroport, elle renvoie le
           panneau des arrivées et des départs sur une fenêtre donnée : numéro de vol, compagnie,
           aéroport pair, <strong>heure prévue</strong> et <strong>heure révisée</strong>. C'est l'écart
-          entre ces deux heures qui donne le retard réel — la donnée centrale de tout le site.</p>
+          entre ces deux heures qui donne le retard réel, la donnée centrale de tout le site.</p>
         </section>
 
         <section className="doc-section">
@@ -82,7 +82,7 @@ export default function AProposPage() {
           <p>Un programme planifié (via GitHub Actions) interroge l'API plusieurs fois par jour,
           transforme les données et les écrit dans une base PostgreSQL hébergée sur Supabase. Le site
           web lit ensuite directement cette base, <strong>côté serveur</strong> : aucune donnée ni
-          identifiant ne transite par le navigateur du visiteur. Ce choix est volontaire — c'est une
+          identifiant ne transite par le navigateur du visiteur. Ce choix est volontaire, c'est une
           application concrète du principe de <em>privacy by design</em>.</p>
         </section>
 
@@ -102,8 +102,8 @@ export default function AProposPage() {
           d'affichage aéroportuaires</strong> (FIDS) pour la vue temps réel des vols ; le suivi de la
           <strong> ponctualité opérationnelle</strong> (On-Time Performance) tel qu'il se pratique dans
           le transport ; l'<strong>architecture lakehouse</strong> (médaillon) pour le raffinage des
-          données ; et les cadres de <strong>gouvernance</strong> — registre des traitements (RGPD),
-          classification des usages d'IA (règlement européen sur l'IA) — pour la partie conformité.</p>
+          données ; et les cadres de <strong>gouvernance</strong>, registre des traitements (RGPD),
+          classification des usages d'IA (règlement européen sur l'IA), pour la partie conformité.</p>
         </section>
 
         <section className="doc-section note-honnete">

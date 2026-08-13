@@ -57,7 +57,7 @@ export default async function StatsPage({
         {recent6h.total > 0 ? (
           <>
             {recent6h.total} vols, dont <strong>{recent6h.delayed_count}</strong> retardés
-            (&gt; 15 min) · retard moyen {recent6h.mean_delay ?? "—"} min · {recent6h.cancelled_count} annulés.
+            (&gt; 15 min) · retard moyen {recent6h.mean_delay ?? "n/d"} min · {recent6h.cancelled_count} annulés.
           </>
         ) : (
           <>aucun vol sur cette fenêtre (données rafraîchies plusieurs fois par jour).</>
@@ -65,16 +65,16 @@ export default async function StatsPage({
       </p>
 
       <section className="banner stat-kpis">
-        <div className="card"><div className="card-label">Ponctualité (≤ 15 min)</div><div className="card-value">{kpis.on_time_pct ?? "—"}%</div></div>
-        <div className="card"><div className="card-label">Retard moyen</div><div className="card-value">{kpis.mean_delay ?? "—"} min</div></div>
-        <div className="card"><div className="card-label">Vols retardés</div><div className="card-value">{kpis.delayed_count}<span className="card-sub"> · {kpis.delayed_pct ?? "—"}%</span></div></div>
+        <div className="card"><div className="card-label">Ponctualité (≤ 15 min)</div><div className="card-value">{kpis.on_time_pct ?? "n/d"}%</div></div>
+        <div className="card"><div className="card-label">Retard moyen</div><div className="card-value">{kpis.mean_delay ?? "n/d"} min</div></div>
+        <div className="card"><div className="card-label">Vols retardés</div><div className="card-value">{kpis.delayed_count}<span className="card-sub"> · {kpis.delayed_pct ?? "n/d"}%</span></div></div>
         <div className="card"><div className="card-label">Annulés</div><div className="card-value">{kpis.cancelled_count}</div></div>
         <div className="card"><div className="card-label">Vols analysés</div><div className="card-value">{kpis.total}</div></div>
       </section>
 
       <section className="chart">
         <h2>Retard moyen par heure de la journée</h2>
-        <p className="chart-hint">Heure prévue (UTC) — révèle les créneaux de pointe.</p>
+        <p className="chart-hint">Heure prévue (UTC), révèle les créneaux de pointe.</p>
         {byHour.length === 0 ? <p className="muted">Pas de données sur cette période.</p> : (
           <div className="vbars">
             {byHour.map((r) => (
@@ -116,7 +116,7 @@ export default async function StatsPage({
                 {bandsSorted.map((b) => (
                   <tr key={b.risk_band}>
                     <td><span className={`band band-${b.risk_band === "eleve" ? "high" : b.risk_band === "modere" ? "mid" : "low"}`}>{bandLabel[b.risk_band] ?? b.risk_band}</span></td>
-                    <td>{b.n}</td><td>{b.avg_delay ?? "—"} min</td><td>{b.delayed_pct ?? "—"}%</td>
+                    <td>{b.n}</td><td>{b.avg_delay ?? "n/d"} min</td><td>{b.delayed_pct ?? "n/d"}%</td>
                   </tr>
                 ))}
               </tbody>
@@ -131,8 +131,8 @@ export default async function StatsPage({
           {airports.map((a) => (
             <div key={a.airport} className="airport-card">
               <div className="airport-name">{a.airport === "LFPG" ? "Paris-CDG" : a.airport === "LFPO" ? "Paris-Orly" : a.airport}</div>
-              <div className="airport-row"><span>Ponctualité</span><strong>{a.on_time_pct ?? "—"}%</strong></div>
-              <div className="airport-row"><span>Retard moyen</span><strong>{a.avg_delay ?? "—"} min</strong></div>
+              <div className="airport-row"><span>Ponctualité</span><strong>{a.on_time_pct ?? "n/d"}%</strong></div>
+              <div className="airport-row"><span>Retard moyen</span><strong>{a.avg_delay ?? "n/d"} min</strong></div>
               <div className="airport-row"><span>Vols analysés</span><strong>{a.known}</strong></div>
             </div>
           ))}

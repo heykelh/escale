@@ -2,7 +2,7 @@ import Nav from "@/components/Nav";
 import { getAiSystemes, getAiTracabilite } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "ESCALE — Registre IA (AI Act)" };
+export const metadata = { title: "ESCALE, Registre IA (AI Act)" };
 
 const classLabel: Record<string, string> = {
   inacceptable: "Inacceptable", eleve: "Élevé", limite: "Limité", minimal: "Minimal",
