@@ -1,0 +1,208 @@
+/* ESCALE — palette Air France : bleu marine, accent rouge, blanc, filets fins */
+:root {
+  --af-navy: #002157;
+  --af-navy-2: #0a2d6e;
+  --af-red: #ee2737;
+  --ink: #1a2233;
+  --ink-soft: #55617a;
+  --line: #e2e6ee;
+  --line-strong: #cbd3e1;
+  --bg: #ffffff;
+  --bg-soft: #f6f8fc;
+  --high: #c8102e;
+  --mid: #b7791f;
+  --low: #1a7f52;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+  font-family: "Segoe UI", -apple-system, system-ui, Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+code { background: var(--bg-soft); padding: 1px 6px; border-radius: 3px; font-size: 13px; color: var(--af-navy); }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px 72px; }
+
+/* ---- Menu / navigation ---- */
+.head {
+  position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+  backdrop-filter: saturate(180%) blur(8px);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 0; margin-bottom: 30px; border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 14px; height: 24px; background: var(--af-navy); border-left: 4px solid var(--af-red); }
+.brand-name { font-size: 21px; font-weight: 700; letter-spacing: 4px; color: var(--af-navy); }
+.nav { display: flex; gap: 4px; }
+.nav-link {
+  position: relative; color: var(--ink-soft); font-size: 14px; font-weight: 500;
+  padding: 8px 14px; border-radius: 4px; transition: color .15s, background .15s;
+}
+.nav-link:hover { color: var(--af-navy); background: var(--bg-soft); }
+.nav-active { color: var(--af-navy); font-weight: 600; }
+.nav-active::after {
+  content: ""; position: absolute; left: 14px; right: 14px; bottom: 2px;
+  height: 2px; background: var(--af-red); border-radius: 2px;
+}
+
+/* ---- Barre d'heure de référence ---- */
+.timebar {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  background: var(--af-navy); color: #fff; border-radius: 4px;
+  padding: 9px 16px; margin-bottom: 26px; font-size: 13px;
+}
+.timebar-left { display: flex; align-items: center; gap: 10px; }
+.tb-dot { width: 8px; height: 8px; border-radius: 50%; background: #46d17f; box-shadow: 0 0 0 3px rgba(70,209,127,.25); }
+.tb-label { text-transform: uppercase; letter-spacing: .6px; font-size: 11px; color: #aeb9d4; }
+.tb-date { color: #fff; text-transform: capitalize; }
+.timebar-right { display: flex; align-items: baseline; gap: 8px; }
+.tb-clock { font-family: "Consolas", ui-monospace, Menlo, monospace; font-size: 16px; font-weight: 700; letter-spacing: 1px; }
+.tb-tz { font-size: 11px; color: #aeb9d4; text-transform: uppercase; letter-spacing: .5px; }
+.tb-sep { color: #48568a; }
+.tb-utc { font-family: "Consolas", ui-monospace, Menlo, monospace; font-size: 13px; color: #cdd6ea; }
+
+/* ---- Bandeau supervision ---- */
+.banner-intro { margin-bottom: 14px; }
+.banner-intro h2 { color: var(--af-navy); font-size: 17px; margin: 0 0 4px; }
+.banner-intro p { color: var(--ink-soft); font-size: 13.5px; margin: 0; max-width: 720px; }
+.card { display: flex; flex-direction: column; }
+.card-hint { color: var(--ink-soft); font-size: 11.5px; line-height: 1.4; margin-top: 8px; }
+.banner { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.card { padding: 16px 18px; border-right: 1px solid var(--line); background: var(--bg); }
+.card:last-child { border-right: none; }
+.card-label { color: var(--ink-soft); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; }
+.card-value { font-size: 24px; font-weight: 700; margin-top: 5px; color: var(--af-navy); }
+.card-sub { font-size: 15px; font-weight: 500; color: var(--ink-soft); }
+.muted { color: var(--ink-soft); font-size: 13px; margin: 12px 0 0; }
+
+/* ---- Filtres ---- */
+.filters { display: flex; flex-wrap: wrap; gap: 24px; margin: 26px 0 14px; }
+.filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.filter-label { color: var(--ink-soft); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+.chip { color: var(--ink-soft); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 3px; padding: 5px 13px; font-size: 13px; }
+.chip:hover { border-color: var(--af-navy); color: var(--af-navy); }
+.chip-active { background: var(--af-navy); color: #fff; border-color: var(--af-navy); font-weight: 600; }
+
+/* ---- Tableau ---- */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; }
+table.flights { width: 100%; border-collapse: collapse; font-size: 14px; }
+.flights thead th { text-align: left; padding: 11px 14px; background: var(--af-navy); color: #fff; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+.flights tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.flights tbody tr:nth-child(even) { background: var(--bg-soft); }
+.flights tbody tr:hover { background: #eef2fa; }
+.flights.compact thead th { font-size: 11px; padding: 9px 12px; }
+.flights.compact tbody td { padding: 8px 12px; }
+.mono { font-family: "Consolas", ui-monospace, Menlo, monospace; font-size: 13px; }
+.delay-bad { color: var(--high); font-weight: 700; }
+
+.band { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
+.band-high { background: #fbeaec; color: var(--high); border-color: #f3c3c9; }
+.band-mid  { background: #fbf1e0; color: var(--mid);  border-color: #f0dcb8; }
+.band-low  { background: #e7f4ee; color: var(--low);  border-color: #c2e2d1; }
+
+.foot { color: var(--ink-soft); font-size: 12px; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+/* ---- Page statistiques ---- */
+.stats-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
+.stats-head h1 { color: var(--af-navy); font-size: 26px; margin: 0; }
+.recent-callout { background: var(--bg-soft); border-left: 3px solid var(--af-red); padding: 12px 16px; border-radius: 0 4px 4px 0; font-size: 14px; margin: 0 0 22px; }
+.stat-kpis { margin-bottom: 30px; }
+.chart { margin: 0 0 30px; }
+.chart h2 { color: var(--af-navy); font-size: 17px; margin: 0 0 3px; }
+.chart-hint { color: var(--ink-soft); font-size: 12.5px; margin: 0 0 16px; }
+.chart-two { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+
+/* barres verticales */
+.vbars { display: flex; align-items: flex-end; gap: 6px; height: 200px; padding: 8px 4px 0; border: 1px solid var(--line); border-radius: 4px; overflow-x: auto; }
+.vbar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex: 1 0 26px; height: 100%; }
+.vbar-track { width: 60%; height: 100%; display: flex; align-items: flex-end; }
+.vbar-fill { width: 100%; background: var(--af-navy); border-radius: 2px 2px 0 0; min-height: 2px; transition: height .2s; }
+.vbar-x { font-size: 10.5px; color: var(--ink-soft); margin-top: 6px; }
+
+/* barres horizontales */
+.hbars { display: flex; flex-direction: column; gap: 9px; }
+.hbar-row { display: grid; grid-template-columns: 150px 1fr 84px; align-items: center; gap: 10px; font-size: 13px; }
+.hbar-label { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hbar-track { background: var(--bg-soft); border-radius: 3px; height: 16px; }
+.hbar-fill { display: block; height: 100%; background: var(--af-red); border-radius: 3px; min-width: 2px; }
+.hbar-value { text-align: right; color: var(--af-navy); font-weight: 600; }
+.hbar-n { color: var(--ink-soft); font-weight: 400; font-size: 12px; }
+
+/* comparaison aéroports */
+.airport-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.airport-card { border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px; }
+.airport-name { font-weight: 700; color: var(--af-navy); font-size: 15px; margin-bottom: 10px; }
+.airport-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; color: var(--ink-soft); border-top: 1px solid var(--line); }
+.airport-row strong { color: var(--ink); }
+
+/* ---- Page À propos ---- */
+.doc { max-width: 780px; }
+.doc h1 { color: var(--af-navy); font-size: 30px; margin: 4px 0 14px; }
+.lede { font-size: 17px; line-height: 1.6; margin-bottom: 8px; }
+.doc-section { margin-top: 36px; }
+.doc-section h2 { color: var(--af-navy); font-size: 19px; border-bottom: 1px solid var(--line); padding-bottom: 7px; margin-bottom: 14px; }
+.feature { display: flex; gap: 16px; margin-bottom: 22px; }
+.feature-num { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 3px; background: var(--af-navy); color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; margin-top: 3px; }
+.feature h3 { margin: 2px 0 6px; font-size: 16px; }
+.feature p { margin: 0; color: var(--ink-soft); }
+.pipeline { display: flex; align-items: stretch; gap: 10px; margin: 16px 0; }
+.pipe-step { flex: 1; border: 1px solid var(--line); border-radius: 4px; padding: 14px; background: var(--bg-soft); }
+.pipe-tag { display: inline-block; font-weight: 700; color: var(--af-navy); font-size: 13px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+.pipe-step p { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.pipe-arrow { align-self: center; color: var(--line-strong); font-size: 20px; font-weight: 700; }
+.stack { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.stack-block { border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; }
+.stack-block h4 { margin: 0 0 6px; color: var(--af-navy); font-size: 14px; }
+.stack-block p { margin: 0; color: var(--ink-soft); font-size: 13.5px; }
+.note-honnete { background: var(--bg-soft); border-left: 3px solid var(--af-navy); padding: 18px 20px; border-radius: 0 4px 4px 0; }
+.note-honnete h2 { border: none; margin-bottom: 8px; }
+.back { margin-top: 40px; }
+
+.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-tagline { font-size: 11px; color: var(--ink-soft); letter-spacing: .3px; margin-top: 2px; }
+
+/* ---- Registres RGPD / AI Act ---- */
+.doc-wide { max-width: 920px; }
+.reg-card { border: 1px solid var(--line); border-radius: 4px; padding: 0; margin-bottom: 18px; overflow: hidden; }
+.reg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: var(--bg-soft); padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.reg-name { font-weight: 700; color: var(--af-navy); font-size: 15px; }
+.reg-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.reg-row { display: grid; grid-template-columns: 200px 1fr; gap: 14px; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.reg-row:last-child { border-bottom: none; }
+.reg-label { color: var(--ink-soft); font-weight: 600; }
+.reg-value { color: var(--ink); }
+.reg-just { color: var(--ink-soft); font-size: 13px; }
+.verdict { background: var(--bg-soft); border-left: 3px solid var(--af-navy); padding: 14px 16px; border-radius: 0 4px 4px 0; margin-top: 16px; font-size: 14px; }
+
+.tag { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 11.5px; font-weight: 600; border: 1px solid transparent; }
+.tag-yes { background: #fbeaec; color: var(--high); border-color: #f3c3c9; }
+.tag-no { background: #e7f4ee; color: var(--low); border-color: #c2e2d1; }
+.tag-active { background: #e8effb; color: var(--af-navy); border-color: #c4d4ee; }
+.tag-proj { background: #fbf1e0; color: var(--mid); border-color: #f0dcb8; }
+.tag-class { color: #fff; }
+.tag-minimal { background: var(--low); }
+.tag-limite { background: var(--mid); }
+.tag-eleve { background: var(--high); }
+.tag-inacceptable { background: #4a1020; }
+
+.risk-scale { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.risk-item { border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; }
+.risk-item span { display: block; font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+.risk-item small { color: var(--ink-soft); font-size: 12px; }
+.risk-min { border-top: 3px solid var(--low); }
+.risk-lim { border-top: 3px solid var(--mid); }
+.risk-hi { border-top: 3px solid var(--high); }
+.risk-no { border-top: 3px solid #4a1020; }
+
+@media (max-width: 760px) {
+  .banner { grid-template-columns: repeat(2, 1fr); }
+  .card:nth-child(2n) { border-right: none; }
+  .chart-two, .airport-grid, .stack, .pipeline { grid-template-columns: 1fr; display: grid; }
+  .pipe-arrow { display: none; }
+  .hbar-row { grid-template-columns: 110px 1fr 72px; }
+  .timebar { justify-content: center; text-align: center; }
+  .brand-tagline { display: none; }
+  .reg-row { grid-template-columns: 1fr; gap: 3px; }
+  .risk-scale { grid-template-columns: 1fr 1fr; }
+}

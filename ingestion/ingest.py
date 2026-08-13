@@ -35,14 +35,17 @@ def flight_key(number, scheduled, direction, airport) -> str:
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
+PARIS_CITY = {"LFPG": "Paris CDG", "LFPO": "Paris Orly"}
+
+
 def parse_flight(item: dict, queried_icao: str, direction: str) -> dict:
     # Format FIDS : les temps sont dans les sous-objets 'departure' et 'arrival'.
-    # On lit le segment correspondant a la direction interrogee.
     own = item.get(direction, {}) or {}           # 'departure' ou 'arrival'
     peer_key = "arrival" if direction == "departure" else "departure"
     peer = item.get(peer_key, {}) or {}
     peer_airport = (peer.get("airport") or {})
     peer_icao = peer_airport.get("icao") or peer_airport.get("iata")
+    peer_city = peer_airport.get("name") or peer_icao
 
     scheduled = parse_adb_time(own.get("scheduledTime"))
     revised = parse_adb_time(own.get("revisedTime"))
@@ -52,15 +55,18 @@ def parse_flight(item: dict, queried_icao: str, direction: str) -> dict:
     if scheduled and revised:
         delay_min = round((revised - scheduled).total_seconds() / 60)
     elif scheduled and not cancelled:
-        delay_min = 0  # pas de revision => suppose a l'heure
+        delay_min = 0
     else:
         delay_min = None
 
     number = (item.get("number") or "").replace(" ", "") or None
+    queried_city = PARIS_CITY.get(queried_icao, queried_icao)
     if direction == "departure":
         route = f"{queried_icao}-{peer_icao}" if peer_icao else None
+        origin_city, dest_city = queried_city, peer_city
     else:
         route = f"{peer_icao}-{queried_icao}" if peer_icao else None
+        origin_city, dest_city = peer_city, queried_city
 
     return {
         "flight_key": flight_key(number, scheduled.isoformat() if scheduled else None,
@@ -72,6 +78,8 @@ def parse_flight(item: dict, queried_icao: str, direction: str) -> dict:
         "direction": direction,
         "peer_airport": peer_icao,
         "route": route,
+        "origin_city": origin_city,
+        "dest_city": dest_city,
         "scheduled_utc": scheduled,
         "revised_utc": revised,
         "delay_min": delay_min,
@@ -144,16 +152,18 @@ def main():
             cur.executemany(
                 """insert into silver.flights
                    (flight_key, flight_number, callsign, airline, airport, direction,
-                    peer_airport, route, scheduled_utc, revised_utc, delay_min, status,
-                    cancelled, hour_bucket)
-                   values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    peer_airport, route, origin_city, dest_city, scheduled_utc, revised_utc,
+                    delay_min, status, cancelled, hour_bucket)
+                   values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                    on conflict (flight_key) do update set
                      revised_utc=excluded.revised_utc, delay_min=excluded.delay_min,
-                     status=excluded.status, cancelled=excluded.cancelled, updated_at=now()""",
+                     status=excluded.status, cancelled=excluded.cancelled,
+                     origin_city=excluded.origin_city, dest_city=excluded.dest_city,
+                     updated_at=now()""",
                 [(f["flight_key"], f["flight_number"], f["callsign"], f["airline"],
                   f["airport"], f["direction"], f["peer_airport"], f["route"],
-                  f["scheduled_utc"], f["revised_utc"], f["delay_min"], f["status"],
-                  f["cancelled"], f["hour_bucket"]) for f in flights],
+                  f["origin_city"], f["dest_city"], f["scheduled_utc"], f["revised_utc"],
+                  f["delay_min"], f["status"], f["cancelled"], f["hour_bucket"]) for f in flights],
             )
             # PROPENSION : retard moyen historique par route (silver complet)
             cur.execute(
