@@ -1,73 +1,113 @@
 # ESCALE
 
-Petit système qui suit les vols autour de Roissy et d'Orly et estime, pour chacun,
-un risque de retard. Autour de ce calcul, je tiens aussi la partie "paperasse" qui
-va avec tout traitement automatisé de données : registre des données personnelles
-et registre des usages d'IA.
+Système qui prédit le risque de retard des vols à venir de Roissy-CDG et Orly,
+vérifie ses prédictions contre la réalité, et tient à jour la documentation
+réglementaire qui accompagne tout traitement automatisé de données.
 
-## Ce que ça fait, concrètement
+**Démo en ligne : https://escale-ops.vercel.app**
 
-**1. Estimer le risque de retard d'un vol**
-Le système récupère en continu les vols qui arrivent et partent de Roissy et d'Orly.
-Pour chaque vol, il calcule une note de risque de retard. Pas avec une IA opaque :
-avec trois critères simples et lisibles — l'aéroport est-il saturé à ce moment-là,
-est-on à une heure de pointe, et cette liaison a-t-elle l'habitude de traîner. Un vol
-qui cumule les trois ressort en risque élevé.
-Le système se surveille aussi lui-même : il vérifie que les données reçues sont
-complètes et récentes, et consigne les anomalies dans un journal à traiter. C'est ce
-qu'on attend d'un outil qu'on laisse tourner seul — qu'il sache signaler quand quelque
-chose cloche plutôt que de sortir un chiffre faux sans prévenir.
+## Ce que fait ESCALE
 
-**2. Tenir le registre des données personnelles**
-Dès qu'un système manipule de la donnée, il faut documenter quelles données sont
-utilisées, pourquoi, sur quelle base légale et combien de temps elles sont conservées.
-Cette partie tient ce registre, avec une courte analyse d'impact sur le calcul de
-retard : touche-t-il à des données permettant d'identifier des personnes, et si oui
-comment c'est encadré.
+1. **Prédire** — plusieurs fois par jour, le système récupère les vols à venir de
+   CDG et Orly et calcule pour chacun, à l'avance, un risque de retard (faible,
+   modéré, élevé).
+2. **Vérifier** — une fois le vol réalisé, il compare sa prédiction au retard
+   réellement observé, et mesure sa justesse (précision, rappel, taux de retard
+   par niveau).
+3. **Superviser** — il contrôle en continu la qualité des données reçues
+   (complétude, fraîcheur, valeurs aberrantes), journalise les anomalies et alerte
+   en cas de dégradation.
+4. **Encadrer** — il maintient un registre RGPD (traitements, analyse d'impact) et
+   un registre AI Act (classification, traçabilité des usages).
 
-**3. Tenir le registre des usages d'IA**
-Le règlement européen sur l'IA demande aux organisations de classer leurs systèmes
-automatisés par niveau de risque et de garder une trace de là où de l'IA est utilisée.
-Cette partie fait ça pour le calcul de risque de retard : elle le classe et journalise
-son usage, pour qu'un responsable puisse à tout moment savoir ce qui tourne et sous
-quel régime.
+## Comment le score est calculé
 
-## Comment le score est calculé (et ce qu'il vaut)
+Score déterministe, relisible ligne à ligne, sans modèle opaque :
 
-Les données viennent d'AeroDataBox : pour chaque vol, heure prévue et heure révisée,
-donc un **retard réel** (révisé − prévu) et le statut (annulé, retardé...).
+risque = 0,40 × congestion + 0,25 × créneau horaire + 0,35 × propension de la liaison
 
-La note de risque est **prospective** : elle n'utilise pas le retard du vol lui-même
-(ce serait tricher), mais trois facteurs connus à l'avance — la saturation de l'aéroport
-sur le créneau, l'heure (pointe/creux), et la propension de la liaison à traîner
-(son retard moyen historique). Note sur 0 à 100, entièrement déterministe.
 
-Le retard réel est conservé à part : il sert à **vérifier** le score (les vols notés
-"risque élevé" partent-ils vraiment plus en retard ?). C'est une démonstration de
-méthode sur données publiques, pas la reproduction d'un système interne de compagnie.
+Chaque facteur est normalisé entre 0 et 1 : congestion (mouvements concurrents sur
+le créneau), créneau horaire (plus élevé aux heures de pointe), propension (retard
+moyen historique de la liaison). Résultat sur 0 à 100 → faible (≤ 33), modéré
+(34 à 66), élevé (> 66).
+
+Le score est **prédictif** : il n'utilise jamais le retard réel du vol qu'il
+évalue. Chaque prédiction est figée et horodatée, puis confrontée au réel une fois
+le vol passé.
 
 ## Architecture
 
-    OpenSky (OAuth2)  ->  GitHub Actions (cron 30 min)  ->  Supabase Postgres
-                          bronze (brut) -> silver (nettoye) -> gold (score + suivi)
-                                                              -> Next.js (Vercel)
+AeroDataBox (API) → GitHub Actions (cron 2×/jour, double fenêtre) → PostgreSQL (Neon)
+fenêtre future → prédictions figées
+fenêtre passée → retard réel + réconciliation
+bronze (brut) → argent (nettoyé) → or (score, prédictions, monitoring)
+→ Next.js (Vercel), lecture côté serveur
 
-Un seul entrepôt (Postgres), organisé en couches bronze / silver / gold. Le front lit
-directement la couche gold. Les seuils de qualité de données déclenchent une alerte
-(ntfy.sh) quand la complétude chute.
+
+Architecture en médaillon (bronze / argent / or) sur un seul entrepôt Postgres. Le
+front lit directement la couche or, **côté serveur** : aucune donnée ni secret ne
+transite par le navigateur du visiteur (privacy by design).
+
+## Pile technique
+
+| Domaine | Outils |
+|---|---|
+| Collecte & traitement | Python 3.12, API AeroDataBox (RapidAPI), GitHub Actions |
+| Stockage | PostgreSQL (Neon), schémas bronze / argent / or |
+| Site web | Next.js 15 (React, rendu serveur), TypeScript, Vercel |
+| Qualité & alertes | Contrôles automatiques, journal d'anomalies, ntfy.sh |
+| Tests | pytest (scoring déterministe) |
+
+## Les pages
+
+- **Suivi des vols** — vols à venir avec leur risque prédit, filtres et recherche.
+- **Statistiques** — ponctualité, retards par heure, liaisons les plus en retard,
+  comparaison CDG / Orly.
+- **Fiabilité** — confrontation prédictions vs réel : précision, rappel, taux par
+  niveau, et justification vol par vol.
+- **Registre RGPD** — registre des traitements et analyse d'impact (AIPD).
+- **Registre IA** — classification AI Act et journal de traçabilité.
+- **À propos** — fonctionnement détaillé et choix techniques.
 
 ## Lancer en local (Windows)
 
-    python -m venv .venv
-    .venv\Scripts\activate
-    pip install -r requirements.txt
+Prérequis : Python 3.12, Node.js, pnpm, un projet Neon, une clé RapidAPI
+(AeroDataBox).
 
-Puis :
-1. Coller `sql/schema.sql` dans Supabase (SQL Editor).
-2. Copier `.env.example` en `.env` et remplir OpenSky + Supabase.
-3. `python -m ingestion.ingest`
-4. `pytest`
+**Pipeline d'ingestion :**
 
-## Stack
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+# Copier .env.example en .env et remplir RAPIDAPI_KEY + DATABASE_URL (Neon)
+# Exécuter dans Neon, dans l'ordre : sql/schema.sql, sql/add_cities.sql,
+#                                    sql/gouvernance.sql, sql/predictions.sql
+python -m ingestion.ingest
+pytest
+```
 
-Python 3.12 (Marche en 3.14)· Supabase Postgres · GitHub Actions · Next.js 15 · Vercel · ntfy.sh
+**Site web :**
+
+```powershell
+cd web
+pnpm install
+# Copier .env.local.example en .env.local et remplir DATABASE_URL (Neon)
+pnpm dev
+```
+
+## Automatisation
+
+Un workflow GitHub Actions (`.github/workflows/ingest.yml`) lance l'ingestion deux
+fois par jour. Chaque exécution interroge l'API sur deux fenêtres (vols futurs pour
+prédire, vols passés pour vérifier), transforme les données et les écrit dans Neon.
+Les secrets `RAPIDAPI_KEY` et `DATABASE_URL` sont configurés côté GitHub.
+
+## Portée
+
+ESCALE est une démonstration de méthode construite sur des **données publiques**.
+Il illustre comment prédire un indicateur opérationnel, en vérifier la fiabilité,
+en garantir la qualité et l'encadrer sur le plan réglementaire. Ce n'est pas la
+reproduction d'un système interne de compagnie aérienne, et les estimations
+n'engagent aucun opérateur réel.
