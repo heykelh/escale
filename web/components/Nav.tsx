@@ -4,6 +4,7 @@ import TimeBar from "./TimeBar";
 const LINKS = [
   { href: "/", key: "vols", label: "Suivi des vols" },
   { href: "/statistiques", key: "stats", label: "Statistiques" },
+  { href: "/fiabilite", key: "fiabilite", label: "Fiabilité" },
   { href: "/rgpd", key: "rgpd", label: "Registre RGPD" },
   { href: "/ai-act", key: "aiact", label: "Registre IA" },
   { href: "/a-propos", key: "apropos", label: "À propos" },

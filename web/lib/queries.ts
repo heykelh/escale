@@ -285,3 +285,57 @@ export async function getAccuracySummary(): Promise<AccuracySummary> {
     from gold.predictions`;
   return rows[0] ?? { total_reconciled: 0, pending: 0 };
 }
+
+/* ---------- Page Fiabilité : analyse détaillée des prédictions ---------- */
+
+// Matrice de confusion sur le seuil "risque élevé" => "sera en retard"
+export type ConfusionStats = {
+  total: number;
+  tp: number; fp: number; tn: number; fn: number;
+  precision: number | null;   // parmi les prédits "élevé", % vraiment en retard
+  recall: number | null;      // parmi les vraiment en retard, % prédits "élevé"
+  accuracy: number | null;    // % de prédictions correctes au global
+};
+
+export async function getConfusion(): Promise<ConfusionStats> {
+  const rows = await sql<any[]>`
+    select
+      count(*)::int as total,
+      count(*) filter (where risk_band = 'eleve' and was_delayed)::int as tp,
+      count(*) filter (where risk_band = 'eleve' and not was_delayed)::int as fp,
+      count(*) filter (where risk_band <> 'eleve' and not was_delayed)::int as tn,
+      count(*) filter (where risk_band <> 'eleve' and was_delayed)::int as fn
+    from gold.predictions
+    where reconciled_at is not null`;
+  const r = rows[0] ?? { total: 0, tp: 0, fp: 0, tn: 0, fn: 0 };
+  const precision = r.tp + r.fp > 0 ? Math.round((r.tp / (r.tp + r.fp)) * 1000) / 10 : null;
+  const recall = r.tp + r.fn > 0 ? Math.round((r.tp / (r.tp + r.fn)) * 1000) / 10 : null;
+  const accuracy = r.total > 0 ? Math.round(((r.tp + r.tn) / r.total) * 1000) / 10 : null;
+  return { ...r, precision, recall, accuracy };
+}
+
+// Échantillon de prédictions vérifiées, les plus parlantes (risque élevé d'abord)
+export type VerifiedPrediction = {
+  flight_number: string | null;
+  airline: string | null;
+  origin_city: string | null;
+  dest_city: string | null;
+  scheduled_utc: string;
+  risk_score: number;
+  risk_band: string;
+  congestion: number | null;
+  route_hist_delay_min: number | null;
+  actual_delay_min: number | null;
+  was_delayed: boolean;
+};
+
+export async function getVerifiedSample(limit = 30): Promise<VerifiedPrediction[]> {
+  return sql<VerifiedPrediction[]>`
+    select flight_number, airline, origin_city, dest_city, scheduled_utc,
+           risk_score, risk_band, congestion, route_hist_delay_min,
+           actual_delay_min, was_delayed
+    from gold.predictions
+    where reconciled_at is not null
+    order by scheduled_utc desc
+    limit ${limit}`;
+}

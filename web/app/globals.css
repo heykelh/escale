@@ -219,6 +219,19 @@ table.flights { width: 100%; border-collapse: collapse; font-size: 14px; }
 .pred-box { border: 1px solid var(--line); border-left: 3px solid var(--af-red); border-radius: 4px; padding: 18px 20px; background: var(--bg-soft); }
 .pred-box h2 { margin-top: 0; }
 
+/* ---- Page Fiabilité ---- */
+.verdict-ok { border-left-color: var(--low); }
+.verif-list { display: flex; flex-direction: column; gap: 8px; }
+.verif-row { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--line); border-radius: 4px; padding: 11px 14px; }
+.verif-ok { border-left: 3px solid var(--low); }
+.verif-ko { border-left: 3px solid var(--mid); }
+.verif-mark { font-weight: 800; font-size: 16px; line-height: 1.4; }
+.verif-ok .verif-mark { color: var(--low); }
+.verif-ko .verif-mark { color: var(--mid); }
+.verif-body { flex: 1; }
+.verif-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 13.5px; margin-bottom: 4px; }
+.verif-just { font-size: 13px; color: var(--ink-soft); }
+
 @media (max-width: 760px) {
   .banner { grid-template-columns: repeat(2, 1fr); }
   .card:nth-child(2n) { border-right: none; }
@@ -229,4 +242,5 @@ table.flights { width: 100%; border-collapse: collapse; font-size: 14px; }
   .brand-tagline { display: none; }
   .reg-row { grid-template-columns: 1fr; gap: 3px; }
   .risk-scale { grid-template-columns: 1fr 1fr; }
+  .verif-head { gap: 6px; }
 }
