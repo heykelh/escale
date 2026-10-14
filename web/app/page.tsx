@@ -1,4 +1,4 @@
-import { getFlights, getLatestMonitoring } from "@/lib/queries";
+import { getUpcoming, getLatestMonitoring } from "@/lib/queries";
 import Nav from "@/components/Nav";
 import MonitoringBanner from "@/components/MonitoringBanner";
 import Filters from "@/components/Filters";
@@ -15,7 +15,7 @@ export default async function Page({
   const sp = await searchParams;
   const [monitoring, flights] = await Promise.all([
     getLatestMonitoring(),
-    getFlights(sp.airport, sp.direction, sp.band, sp.q),
+    getUpcoming(sp.airport, sp.direction, sp.band, sp.q),
   ]);
 
   return (
@@ -24,21 +24,22 @@ export default async function Page({
       <MonitoringBanner m={monitoring} />
 
       <section className="source-note">
-        <h3>D'où viennent ces données ?</h3>
+        <h3>Vols à venir et risque de retard prédit</h3>
         <p>
-          Les vols proviennent de l'API <strong>AeroDataBox</strong>, qui publie pour chaque aéroport
-          les arrivées et départs avec l'heure <strong>prévue</strong> et l'heure <strong>réelle</strong>.
-          Un programme automatisé interroge cette source deux fois par jour, nettoie les données et les
-          enregistre. Le retard affiché est l'écart entre l'heure réelle et l'heure prévue ; le niveau
-          de risque est calculé à partir de la congestion, du créneau horaire et de l'historique de la liaison.
+          Ce tableau liste les vols <strong>à venir</strong> de Roissy-CDG et d'Orly dans les
+          prochaines heures, chacun avec un <strong>risque de retard prédit</strong> (faible, modéré,
+          élevé). La prédiction est calculée à l'avance, à partir de la congestion de l'aéroport, du
+          créneau horaire et de l'historique de la liaison. Une fois le vol réalisé, ESCALE compare la
+          prédiction au retard réellement observé : cette vérification est consultable sur la page
+          Statistiques. Données AeroDataBox, rafraîchies deux fois par jour.
         </p>
       </section>
 
       <Filters current={sp} />
       <SearchBar current={sp} />
-      <FlightsTable flights={flights} />
+      <FlightsTable flights={flights} upcoming />
       <footer className="foot">
-        Vols classés par heure de départ/arrivée prévue · {flights.length} vols affichés (max 200) · source AeroDataBox
+        Vols à venir classés par heure prévue · {flights.length} vols affichés (max 200) · source AeroDataBox
       </footer>
     </main>
   );

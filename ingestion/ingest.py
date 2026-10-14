@@ -1,4 +1,9 @@
-"""Pipeline ESCALE : AeroDataBox FIDS -> Supabase (bronze/silver/gold)."""
+"""Pipeline ESCALE : AeroDataBox FIDS -> Neon (bronze/silver/gold).
+
+Double fenetre :
+  - FUTUR (prochaines 12h) : vols a venir -> prediction figee dans gold.predictions
+  - PASSE (dernieres 12h)  : vols arrives -> silver/gold + reconciliation des predictions
+"""
 import hashlib
 import sys
 import time
@@ -13,9 +18,10 @@ from ingestion import config
 from ingestion.aerodatabox_client import AeroDataBoxClient
 from ingestion.risk_scoring import compute_risk
 
+PARIS_CITY = {"LFPG": "Paris CDG", "LFPO": "Paris Orly"}
+
 
 def parse_adb_time(t):
-    """Objet {'utc': '2026-08-12 08:30Z', 'local': ...} -> datetime UTC."""
     if not t:
         return None
     s = t.get("utc") if isinstance(t, dict) else t
@@ -35,12 +41,8 @@ def flight_key(number, scheduled, direction, airport) -> str:
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
-PARIS_CITY = {"LFPG": "Paris CDG", "LFPO": "Paris Orly"}
-
-
 def parse_flight(item: dict, queried_icao: str, direction: str) -> dict:
-    # Format FIDS : les temps sont dans les sous-objets 'departure' et 'arrival'.
-    own = item.get(direction, {}) or {}           # 'departure' ou 'arrival'
+    own = item.get(direction, {}) or {}
     peer_key = "arrival" if direction == "departure" else "departure"
     peer = item.get(peer_key, {}) or {}
     peer_airport = (peer.get("airport") or {})
@@ -99,6 +101,33 @@ def notify(msg: str):
         pass
 
 
+def fetch_window(client, tz, fmt, hours_from, hours_to):
+    """Recupere les vols sur une fenetre [now+hours_from, now+hours_to] (heures, signees)."""
+    now_local = datetime.now(tz)
+    begin_local = now_local + timedelta(hours=hours_from)
+    end_local = now_local + timedelta(hours=hours_to)
+    flights = []
+    for ap in config.AIRPORTS:
+        data = client.fids(ap["icao"], begin_local.strftime(fmt), end_local.strftime(fmt))
+        for rec in data.get("departures", []) or []:
+            flights.append(parse_flight(rec, ap["icao"], "departure"))
+        for rec in data.get("arrivals", []) or []:
+            flights.append(parse_flight(rec, ap["icao"], "arrival"))
+        time.sleep(2)
+    flights = list({f["flight_key"]: f for f in flights}.values())
+    return flights, begin_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+
+def score_flights(flights):
+    """Calcule congestion + score pour une liste de vols. Retourne un dict flight_key -> infos score."""
+    buckets = {}
+    for f in flights:
+        k = (f["airport"], f["direction"], f["hour_bucket"])
+        buckets[k] = buckets.get(k, 0) + 1
+    # la propension historique est recalculee par l'appelant (acces base) ; ici on renvoie la congestion
+    return buckets
+
+
 def main():
     if not config.RAPIDAPI_KEY or config.RAPIDAPI_KEY == "xxxxx":
         sys.exit("ERREUR: RAPIDAPI_KEY manquant ou non rempli dans .env")
@@ -106,150 +135,181 @@ def main():
         sys.exit("ERREUR: DATABASE_URL manquant ou non rempli dans .env")
 
     tz = ZoneInfo(config.TZ)
-    now_local = datetime.now(tz)
-    from_local = now_local - timedelta(hours=config.WINDOW_HOURS)
     fmt = "%Y-%m-%dT%H:%M"
-    win_begin = from_local.astimezone(timezone.utc)
-    win_end = now_local.astimezone(timezone.utc)
-
     client = AeroDataBoxClient(config.RAPIDAPI_KEY)
+    now_utc = datetime.now(timezone.utc)
 
-    # --- FETCH ---
-    flights = []
-    for ap in config.AIRPORTS:
-        data = client.fids(ap["icao"], from_local.strftime(fmt), now_local.strftime(fmt))
-        for rec in data.get("departures", []) or []:
-            flights.append(parse_flight(rec, ap["icao"], "departure"))
-        for rec in data.get("arrivals", []) or []:
-            flights.append(parse_flight(rec, ap["icao"], "arrival"))
-        time.sleep(2)   # respecte la limite req/s du plan Basic
+    # ========== PASSE FUTURE : prochaines 12h -> predictions figees ==========
+    future_flights, _, _ = fetch_window(client, tz, fmt, 0, config.WINDOW_HOURS)
+    print(f"[FUTUR] vols a venir recuperes: {len(future_flights)}")
 
-    flights = list({f["flight_key"]: f for f in flights}.values())
-    print(f"Vols recuperes: {len(flights)}")
+    # ========== PASSE PASSEE : dernieres 12h -> silver/gold + reconciliation ==========
+    past_flights, win_begin, win_end = fetch_window(client, tz, fmt, -config.WINDOW_HOURS, 0)
+    print(f"[PASSE] vols arrives recuperes: {len(past_flights)}")
 
-    if not flights:
-        print("Aucun vol sur la fenetre. Si tu t'attendais a des vols, "
-              "inspecte un enregistrement dans bronze.raw_flights (noms de champs).")
+    if not future_flights and not past_flights:
+        print("Aucun vol sur les deux fenetres, run termine.")
         return
 
-    # --- CONGESTION (par aeroport + direction + creneau, dans le batch) ---
-    buckets = {}
-    for f in flights:
-        k = (f["airport"], f["direction"], f["hour_bucket"])
-        buckets[k] = buckets.get(k, 0) + 1
+    future_buckets = score_flights(future_flights)
+    past_buckets = score_flights(past_flights)
 
     with psycopg.connect(config.DATABASE_URL, autocommit=False) as conn:
         with conn.cursor() as cur:
-            # BRONZE
-            cur.executemany(
-                """insert into bronze.raw_flights (flight_key, airport, direction, payload)
-                   values (%s,%s,%s,%s)
-                   on conflict (flight_key) do update
-                     set payload = excluded.payload, ingested_at = now()""",
-                [(f["flight_key"], f["airport"], f["direction"], Json(f["_raw"])) for f in flights],
-            )
-            # SILVER
-            cur.executemany(
-                """insert into silver.flights
-                   (flight_key, flight_number, callsign, airline, airport, direction,
-                    peer_airport, route, origin_city, dest_city, scheduled_utc, revised_utc,
-                    delay_min, status, cancelled, hour_bucket)
-                   values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                   on conflict (flight_key) do update set
-                     revised_utc=excluded.revised_utc, delay_min=excluded.delay_min,
-                     status=excluded.status, cancelled=excluded.cancelled,
-                     origin_city=excluded.origin_city, dest_city=excluded.dest_city,
-                     updated_at=now()""",
-                [(f["flight_key"], f["flight_number"], f["callsign"], f["airline"],
-                  f["airport"], f["direction"], f["peer_airport"], f["route"],
-                  f["origin_city"], f["dest_city"], f["scheduled_utc"], f["revised_utc"],
-                  f["delay_min"], f["status"], f["cancelled"], f["hour_bucket"]) for f in flights],
-            )
-            # PROPENSION : retard moyen historique par route (silver complet)
+            # --- propension historique par route (base complete) ---
             cur.execute(
-                """select route, avg(delay_min)
-                   from silver.flights
+                """select route, avg(delay_min) from silver.flights
                    where route is not null and delay_min is not null
-                     and delay_min between %s and %s
-                   group by route""",
+                     and delay_min between %s and %s group by route""",
                 (config.DELAY_MIN_BOUND, config.DELAY_MAX_BOUND),
             )
             route_delay = {r: float(d) for r, d in cur.fetchall() if d is not None}
 
-            # GOLD : scoring
-            gold_rows = []
-            for f in flights:
-                concurrent = buckets[(f["airport"], f["direction"], f["hour_bucket"])]
-                hist = route_delay.get(f["route"])
-                score, band = compute_risk(
-                    hour=f["hour_bucket"] or 0,
-                    concurrent=concurrent,
-                    route_hist_delay_min=hist,
-                )
-                gold_rows.append((f["flight_key"], f["route"], f["hour_bucket"], concurrent,
-                                  round(hist, 1) if hist is not None else None,
-                                  f["delay_min"], score, band))
-            cur.executemany(
-                """insert into gold.flight_risk
-                   (flight_key, route, hour_bucket, congestion, route_hist_delay_min,
-                    actual_delay_min, risk_score, risk_band)
-                   values (%s,%s,%s,%s,%s,%s,%s,%s)
-                   on conflict (flight_key) do update set
-                     congestion=excluded.congestion,
-                     route_hist_delay_min=excluded.route_hist_delay_min,
-                     actual_delay_min=excluded.actual_delay_min,
-                     risk_score=excluded.risk_score, risk_band=excluded.risk_band,
-                     scored_at=now()""",
-                gold_rows,
-            )
-
-            # MONITORING
-            total = len(flights)
-            complete = sum(1 for f in flights if f["route"] and f["scheduled_utc"])
-            oob = sum(1 for f in flights if f["delay_min"] is not None
-                      and not (config.DELAY_MIN_BOUND <= f["delay_min"] <= config.DELAY_MAX_BOUND))
-            high = sum(1 for r in gold_rows if r[7] == "eleve")
-            cancelled_n = sum(1 for f in flights if f["cancelled"])
-            delays = [f["delay_min"] for f in flights if f["delay_min"] is not None
-                      and config.DELAY_MIN_BOUND <= f["delay_min"] <= config.DELAY_MAX_BOUND]
-            mean_delay = round(sum(delays) / len(delays), 1) if delays else None
-            cur.execute(
-                """insert into gold.monitoring_metrics
-                   (window_begin, window_end, flights_ingested, completeness_pct,
-                    out_of_bounds, high_risk_pct, cancelled_count, mean_delay_min)
-                   values (%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (win_begin, win_end, total, round(100 * complete / total, 1),
-                 oob, round(100 * high / total, 1), cancelled_n, mean_delay),
-            )
-
-            # BACKLOG DQ (rules deterministes, insert idempotent)
-            dq = []
-            for f in flights:
-                if not f["route"]:
-                    dq.append(("medium", "route_missing", "Aeroport pair non identifie", f["flight_key"]))
+            # ============ 1) PREDICTIONS (vols futurs) ============
+            pred_rows = []
+            for f in future_flights:
                 if not f["scheduled_utc"]:
-                    dq.append(("high", "scheduled_missing", "Heure prevue absente", f["flight_key"]))
-                if f["delay_min"] is not None and not (
-                        config.DELAY_MIN_BOUND <= f["delay_min"] <= config.DELAY_MAX_BOUND):
-                    dq.append(("high", "delay_out_of_bounds",
-                               f"Retard aberrant: {f['delay_min']} min", f["flight_key"]))
-                if not f["flight_number"]:
-                    dq.append(("low", "flight_number_missing", "Numero de vol absent", f["flight_key"]))
-            for sev, rule, desc, fk in dq:
-                cur.execute(
-                    """insert into gold.dq_backlog (severity, rule, description, flight_key)
-                       select %s,%s,%s,%s
-                       where not exists (
-                         select 1 from gold.dq_backlog
-                         where rule=%s and coalesce(flight_key,'')=coalesce(%s,'') and status<>'resolved')""",
-                    (sev, rule, desc, fk, rule, fk),
+                    continue
+                concurrent = future_buckets[(f["airport"], f["direction"], f["hour_bucket"])]
+                hist = route_delay.get(f["route"])
+                score, band = compute_risk(hour=f["hour_bucket"] or 0, concurrent=concurrent,
+                                           route_hist_delay_min=hist)
+                pred_rows.append((
+                    f["flight_key"], f["flight_number"], f["airline"], f["airport"], f["direction"],
+                    f["route"], f["origin_city"], f["dest_city"], f["scheduled_utc"], now_utc,
+                    concurrent, round(hist, 1) if hist is not None else None, score, band,
+                ))
+            # on insere la prediction ; si le vol est deja connu, on NE reecrit PAS le score
+            # (la prediction d'origine reste figee), on met juste a jour les infos descriptives.
+            cur.executemany(
+                """insert into gold.predictions
+                   (flight_key, flight_number, airline, airport, direction, route,
+                    origin_city, dest_city, scheduled_utc, predicted_at, congestion,
+                    route_hist_delay_min, risk_score, risk_band)
+                   values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   on conflict (flight_key) do update set
+                     flight_number=excluded.flight_number, airline=excluded.airline,
+                     origin_city=excluded.origin_city, dest_city=excluded.dest_city""",
+                pred_rows,
+            )
+
+            # ============ 2) SILVER / GOLD classiques (vols passes) ============
+            if past_flights:
+                cur.executemany(
+                    """insert into bronze.raw_flights (flight_key, airport, direction, payload)
+                       values (%s,%s,%s,%s)
+                       on conflict (flight_key) do update
+                         set payload = excluded.payload, ingested_at = now()""",
+                    [(f["flight_key"], f["airport"], f["direction"], Json(f["_raw"])) for f in past_flights],
                 )
+                cur.executemany(
+                    """insert into silver.flights
+                       (flight_key, flight_number, callsign, airline, airport, direction,
+                        peer_airport, route, origin_city, dest_city, scheduled_utc, revised_utc,
+                        delay_min, status, cancelled, hour_bucket)
+                       values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       on conflict (flight_key) do update set
+                         revised_utc=excluded.revised_utc, delay_min=excluded.delay_min,
+                         status=excluded.status, cancelled=excluded.cancelled,
+                         origin_city=excluded.origin_city, dest_city=excluded.dest_city,
+                         updated_at=now()""",
+                    [(f["flight_key"], f["flight_number"], f["callsign"], f["airline"],
+                      f["airport"], f["direction"], f["peer_airport"], f["route"],
+                      f["origin_city"], f["dest_city"], f["scheduled_utc"], f["revised_utc"],
+                      f["delay_min"], f["status"], f["cancelled"], f["hour_bucket"]) for f in past_flights],
+                )
+                gold_rows = []
+                for f in past_flights:
+                    concurrent = past_buckets[(f["airport"], f["direction"], f["hour_bucket"])]
+                    hist = route_delay.get(f["route"])
+                    score, band = compute_risk(hour=f["hour_bucket"] or 0, concurrent=concurrent,
+                                               route_hist_delay_min=hist)
+                    gold_rows.append((f["flight_key"], f["route"], f["hour_bucket"], concurrent,
+                                      round(hist, 1) if hist is not None else None,
+                                      f["delay_min"], score, band))
+                cur.executemany(
+                    """insert into gold.flight_risk
+                       (flight_key, route, hour_bucket, congestion, route_hist_delay_min,
+                        actual_delay_min, risk_score, risk_band)
+                       values (%s,%s,%s,%s,%s,%s,%s,%s)
+                       on conflict (flight_key) do update set
+                         congestion=excluded.congestion,
+                         route_hist_delay_min=excluded.route_hist_delay_min,
+                         actual_delay_min=excluded.actual_delay_min,
+                         risk_score=excluded.risk_score, risk_band=excluded.risk_band,
+                         scored_at=now()""",
+                    gold_rows,
+                )
+
+            # ============ 3) RECONCILIATION : predictions passees vs reel observe ============
+            # Pour chaque vol arrive (present en silver avec un retard connu), on remplit
+            # le constat dans gold.predictions SANS toucher au score predit.
+            cur.execute(
+                """update gold.predictions p
+                   set actual_delay_min = s.delay_min,
+                       was_delayed = (s.delay_min > 15),
+                       reconciled_at = now()
+                   from silver.flights s
+                   where s.flight_key = p.flight_key
+                     and s.delay_min is not null
+                     and p.reconciled_at is null
+                     and p.scheduled_utc < now()""",
+            )
+            reconciled = cur.rowcount
+
+            # ============ 4) MONITORING (sur les vols passes) ============
+            if past_flights:
+                total = len(past_flights)
+                complete = sum(1 for f in past_flights if f["route"] and f["scheduled_utc"])
+                oob = sum(1 for f in past_flights if f["delay_min"] is not None
+                          and not (config.DELAY_MIN_BOUND <= f["delay_min"] <= config.DELAY_MAX_BOUND))
+                high = sum(1 for r in gold_rows if r[7] == "eleve")
+                cancelled_n = sum(1 for f in past_flights if f["cancelled"])
+                delays = [f["delay_min"] for f in past_flights if f["delay_min"] is not None
+                          and config.DELAY_MIN_BOUND <= f["delay_min"] <= config.DELAY_MAX_BOUND]
+                mean_delay = round(sum(delays) / len(delays), 1) if delays else None
+                cur.execute(
+                    """insert into gold.monitoring_metrics
+                       (window_begin, window_end, flights_ingested, completeness_pct,
+                        out_of_bounds, high_risk_pct, cancelled_count, mean_delay_min)
+                       values (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (win_begin, win_end, total, round(100 * complete / total, 1),
+                     oob, round(100 * high / total, 1), cancelled_n, mean_delay),
+                )
+
+                # ============ 5) BACKLOG DQ ============
+                dq = []
+                for f in past_flights:
+                    if not f["route"]:
+                        dq.append(("medium", "route_missing", "Aeroport pair non identifie", f["flight_key"]))
+                    if not f["scheduled_utc"]:
+                        dq.append(("high", "scheduled_missing", "Heure prevue absente", f["flight_key"]))
+                    if f["delay_min"] is not None and not (
+                            config.DELAY_MIN_BOUND <= f["delay_min"] <= config.DELAY_MAX_BOUND):
+                        dq.append(("high", "delay_out_of_bounds",
+                                   f"Retard aberrant: {f['delay_min']} min", f["flight_key"]))
+                    if not f["flight_number"]:
+                        dq.append(("low", "flight_number_missing", "Numero de vol absent", f["flight_key"]))
+                for sev, rule, desc, fk in dq:
+                    cur.execute(
+                        """insert into gold.dq_backlog (severity, rule, description, flight_key)
+                           select %s,%s,%s,%s
+                           where not exists (
+                             select 1 from gold.dq_backlog
+                             where rule=%s and coalesce(flight_key,'')=coalesce(%s,'') and status<>'resolved')""",
+                        (sev, rule, desc, fk, rule, fk),
+                    )
+            else:
+                dq = []
+
+            # ============ 6) PURGE bronze > 3 jours ============
+            cur.execute("delete from bronze.raw_flights where ingested_at < now() - interval '3 days'")
+
         conn.commit()
 
-    print(f"OK. {total} vols | completude {round(100*complete/total,1)}% | "
-          f"risque eleve {high} | annules {cancelled_n} | "
-          f"retard moyen {mean_delay} min | anomalies DQ {len(dq)}")
-    if oob > 0:
+    print(f"OK. Predictions ecrites: {len(pred_rows)} | vols passes: {len(past_flights)} | "
+          f"reconciliations: {reconciled} | anomalies DQ: {len(dq)}")
+    if past_flights and oob > 0:
         notify(f"ESCALE: {oob} retards hors-bornes detectes sur le dernier run.")
 
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import Nav from "@/components/Nav";
 import {
   getKpis, getDelayByHour, getTopDelayedRoutes, getValidationByBand, getByAirport,
+  getPredictionAccuracy, getAccuracySummary,
 } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -23,14 +24,16 @@ export default async function StatsPage({
   const sp = await searchParams;
   const hours = sp.h === undefined ? 24 : sp.h === "all" ? null : parseInt(sp.h, 10);
 
-  const [kpis, recent6h, byHour, routes, bands, airports] = await Promise.all([
+  const [kpis, recent6h, byHour, routes, bands, airports, accuracy, accSummary] = await Promise.all([
     getKpis(hours), getKpis(6), getDelayByHour(hours),
     getTopDelayedRoutes(hours), getValidationByBand(hours), getByAirport(hours),
+    getPredictionAccuracy(), getAccuracySummary(),
   ]);
 
   const maxHourDelay = Math.max(1, ...byHour.map((r) => r.avg_delay ?? 0));
   const maxRouteDelay = Math.max(1, ...routes.map((r) => r.avg_delay ?? 0));
   const bandsSorted = [...bands].sort((a, b) => (bandOrder[a.risk_band] ?? 9) - (bandOrder[b.risk_band] ?? 9));
+  const accSorted = [...accuracy].sort((a, b) => (bandOrder[a.risk_band] ?? 9) - (bandOrder[b.risk_band] ?? 9));
 
   return (
     <main className="wrap">
@@ -52,29 +55,52 @@ export default async function StatsPage({
         </div>
       </div>
 
-      <p className="recent-callout">
-        <strong>6 dernières heures :</strong>{" "}
-        {recent6h.total > 0 ? (
-          <>
-            {recent6h.total} vols, dont <strong>{recent6h.delayed_count}</strong> retardés
-            (&gt; 15 min) · retard moyen {recent6h.mean_delay ?? "n/d"} min · {recent6h.cancelled_count} annulés.
-          </>
+      {/* ====== FIABILITÉ DES PRÉDICTIONS (le coeur) ====== */}
+      <section className="chart pred-box">
+        <h2>Fiabilité des prédictions</h2>
+        <p className="chart-hint">
+          Pour chaque vol, ESCALE prédit un risque <em>avant</em> le vol, puis compare au retard réel
+          une fois le vol réalisé. Un bon modèle : plus le risque prédit est élevé, plus le taux de
+          retard réel augmente.
+        </p>
+        {accSummary.total_reconciled === 0 ? (
+          <p className="muted">
+            {accSummary.pending} prédiction(s) en attente de vérification. Les résultats
+            apparaîtront ici dès que ces vols seront réalisés (prochaine collecte).
+          </p>
         ) : (
-          <>aucun vol sur cette fenêtre (données rafraîchies plusieurs fois par jour).</>
+          <>
+            <table className="flights compact">
+              <thead><tr><th>Risque prédit</th><th>Vols vérifiés</th><th>Taux de retard réel (&gt; 15 min)</th><th>Retard réel moyen</th></tr></thead>
+              <tbody>
+                {accSorted.map((a) => (
+                  <tr key={a.risk_band}>
+                    <td><span className={`band band-${a.risk_band === "eleve" ? "high" : a.risk_band === "modere" ? "mid" : "low"}`}>{bandLabel[a.risk_band] ?? a.risk_band}</span></td>
+                    <td>{a.n}</td>
+                    <td><strong>{a.delayed_rate ?? "—"}%</strong></td>
+                    <td>{a.avg_delay ?? "—"} min</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="muted">
+              {accSummary.total_reconciled} prédictions vérifiées · {accSummary.pending} en attente.
+            </p>
+          </>
         )}
-      </p>
+      </section>
 
       <section className="banner stat-kpis">
-        <div className="card"><div className="card-label">Ponctualité (≤ 15 min)</div><div className="card-value">{kpis.on_time_pct ?? "n/d"}%</div></div>
-        <div className="card"><div className="card-label">Retard moyen</div><div className="card-value">{kpis.mean_delay ?? "n/d"} min</div></div>
-        <div className="card"><div className="card-label">Vols retardés</div><div className="card-value">{kpis.delayed_count}<span className="card-sub"> · {kpis.delayed_pct ?? "n/d"}%</span></div></div>
+        <div className="card"><div className="card-label">Ponctualité (≤ 15 min)</div><div className="card-value">{kpis.on_time_pct ?? "—"}%</div></div>
+        <div className="card"><div className="card-label">Retard moyen</div><div className="card-value">{kpis.mean_delay ?? "—"} min</div></div>
+        <div className="card"><div className="card-label">Vols retardés</div><div className="card-value">{kpis.delayed_count}<span className="card-sub"> · {kpis.delayed_pct ?? "—"}%</span></div></div>
         <div className="card"><div className="card-label">Annulés</div><div className="card-value">{kpis.cancelled_count}</div></div>
         <div className="card"><div className="card-label">Vols analysés</div><div className="card-value">{kpis.total}</div></div>
       </section>
 
       <section className="chart">
         <h2>Retard moyen par heure de la journée</h2>
-        <p className="chart-hint">Heure prévue (UTC), révèle les créneaux de pointe.</p>
+        <p className="chart-hint">Heure prévue (UTC) — révèle les créneaux de pointe.</p>
         {byHour.length === 0 ? <p className="muted">Pas de données sur cette période.</p> : (
           <div className="vbars">
             {byHour.map((r) => (
@@ -107,16 +133,16 @@ export default async function StatsPage({
         </section>
 
         <section className="chart">
-          <h2>Fiabilité du score de risque</h2>
-          <p className="chart-hint">Le retard réel augmente-t-il avec le niveau prédit ?</p>
+          <h2>Cohérence du score (vols passés)</h2>
+          <p className="chart-hint">Le retard réel augmente-t-il avec le niveau de risque ?</p>
           {bandsSorted.length === 0 ? <p className="muted">Pas de données.</p> : (
             <table className="flights compact">
-              <thead><tr><th>Niveau prédit</th><th>Vols</th><th>Retard réel moyen</th><th>% retardés</th></tr></thead>
+              <thead><tr><th>Niveau</th><th>Vols</th><th>Retard réel moyen</th><th>% retardés</th></tr></thead>
               <tbody>
                 {bandsSorted.map((b) => (
                   <tr key={b.risk_band}>
                     <td><span className={`band band-${b.risk_band === "eleve" ? "high" : b.risk_band === "modere" ? "mid" : "low"}`}>{bandLabel[b.risk_band] ?? b.risk_band}</span></td>
-                    <td>{b.n}</td><td>{b.avg_delay ?? "n/d"} min</td><td>{b.delayed_pct ?? "n/d"}%</td>
+                    <td>{b.n}</td><td>{b.avg_delay ?? "—"} min</td><td>{b.delayed_pct ?? "—"}%</td>
                   </tr>
                 ))}
               </tbody>
@@ -131,8 +157,8 @@ export default async function StatsPage({
           {airports.map((a) => (
             <div key={a.airport} className="airport-card">
               <div className="airport-name">{a.airport === "LFPG" ? "Paris-CDG" : a.airport === "LFPO" ? "Paris-Orly" : a.airport}</div>
-              <div className="airport-row"><span>Ponctualité</span><strong>{a.on_time_pct ?? "n/d"}%</strong></div>
-              <div className="airport-row"><span>Retard moyen</span><strong>{a.avg_delay ?? "n/d"} min</strong></div>
+              <div className="airport-row"><span>Ponctualité</span><strong>{a.on_time_pct ?? "—"}%</strong></div>
+              <div className="airport-row"><span>Retard moyen</span><strong>{a.avg_delay ?? "—"} min</strong></div>
               <div className="airport-row"><span>Vols analysés</span><strong>{a.known}</strong></div>
             </div>
           ))}

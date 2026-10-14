@@ -215,3 +215,73 @@ export async function getAiTracabilite(): Promise<AiTrace[]> {
            systeme, type_evenement, description, responsable
     from gouvernance.ai_tracabilite order by ordre desc`;
 }
+
+/* ---------- Prédictions (vols à venir) & justesse ---------- */
+
+export type Prediction = {
+  flight_key: string;
+  flight_number: string | null;
+  airline: string | null;
+  airport: string;
+  direction: string;
+  origin_city: string | null;
+  dest_city: string | null;
+  scheduled_utc: string;
+  risk_score: number;
+  risk_band: string;
+};
+
+export async function getUpcoming(
+  airport?: string,
+  direction?: string,
+  band?: string,
+  q?: string
+): Promise<Prediction[]> {
+  const term = q ? `%${q.trim()}%` : null;
+  return sql<Prediction[]>`
+    select flight_key, flight_number, airline, airport, direction,
+           origin_city, dest_city, scheduled_utc, risk_score, risk_band
+    from gold.predictions
+    where scheduled_utc >= now()
+      ${airport ? sql`and airport = ${airport}` : sql``}
+      ${direction ? sql`and direction = ${direction}` : sql``}
+      ${band ? sql`and risk_band = ${band}` : sql``}
+      ${term ? sql`and (origin_city ilike ${term} or dest_city ilike ${term}
+                        or flight_number ilike ${term})` : sql``}
+    order by scheduled_utc asc
+    limit 200`;
+}
+
+// Justesse : sur les prédictions déjà confrontées au réel, le retard observé
+// augmente-t-il avec le niveau prédit ? (le backtest honnête du modèle)
+export type Accuracy = {
+  risk_band: string;
+  n: number;
+  delayed_rate: number | null;   // % réellement en retard (> 15 min)
+  avg_delay: number | null;      // retard réel moyen
+};
+
+export async function getPredictionAccuracy(): Promise<Accuracy[]> {
+  return sql<Accuracy[]>`
+    select risk_band,
+           count(*)::int as n,
+           round(100.0 * count(*) filter (where was_delayed) / nullif(count(*),0), 1) as delayed_rate,
+           round(avg(actual_delay_min))::int as avg_delay
+    from gold.predictions
+    where reconciled_at is not null
+    group by risk_band`;
+}
+
+export type AccuracySummary = {
+  total_reconciled: number;
+  pending: number;
+};
+
+export async function getAccuracySummary(): Promise<AccuracySummary> {
+  const rows = await sql<any[]>`
+    select
+      count(*) filter (where reconciled_at is not null)::int as total_reconciled,
+      count(*) filter (where reconciled_at is null and scheduled_utc >= now())::int as pending
+    from gold.predictions`;
+  return rows[0] ?? { total_reconciled: 0, pending: 0 };
+}

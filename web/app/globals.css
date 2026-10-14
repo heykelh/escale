@@ -212,6 +212,13 @@ table.flights { width: 100%; border-collapse: collapse; font-size: 14px; }
 .nowrap { white-space: nowrap; }
 .muted-inline { color: var(--ink-soft); font-size: 13px; }
 
+.formula { background: var(--bg-soft); border-left: 3px solid var(--af-red); padding: 10px 14px;
+  border-radius: 0 4px 4px 0; font-family: "Consolas", ui-monospace, monospace; font-size: 13.5px;
+  color: var(--af-navy); margin: 10px 0; }
+
+.pred-box { border: 1px solid var(--line); border-left: 3px solid var(--af-red); border-radius: 4px; padding: 18px 20px; background: var(--bg-soft); }
+.pred-box h2 { margin-top: 0; }
+
 @media (max-width: 760px) {
   .banner { grid-template-columns: repeat(2, 1fr); }
   .card:nth-child(2n) { border-right: none; }
