@@ -123,6 +123,39 @@ export default function AProposPage() {
           données ; et les cadres de <strong>gouvernance</strong> — registre des traitements (RGPD),
           classification des usages d'IA (règlement européen sur l'IA) — pour la partie conformité.</p>
         </section>
+        
+        <section className="doc-section">
+          <h2>Perspectives et améliorations</h2>
+          <p>Le modèle actuel est volontairement simple — une somme pondérée de trois facteurs,
+          entièrement lisible. Plusieurs pistes permettraient d'en améliorer la fiabilité, par ordre
+          de rapport valeur / effort :</p>
+
+          <h3 className="persp-h3">Enrichir les facteurs</h3>
+          <p>Le prédicteur le plus puissant d'un retard aérien est <strong>l'effet report</strong> :
+          si l'avion qui assure le vol vient lui-même d'arriver en retard, le vol suivant partira
+          probablement en retard. L'immatriculation de l'appareil étant disponible, ce facteur
+          pourrait être intégré. D'autres signaux aideraient : le jour de la semaine, la propension
+          au retard par compagnie, ou des données météo et de trafic aérien.</p>
+
+          <h3 className="persp-h3">Passer à un modèle appris</h3>
+          <p>Plutôt que de fixer les poids à la main, on pourrait les <strong>apprendre</strong> sur
+          l'historique, avec une régression logistique (qui reste explicable) puis, si le gain le
+          justifie, un modèle d'ensemble type gradient boosting. Ce choix se fait en connaissance de
+          cause : un modèle plus performant est souvent moins interprétable, ce qui a un coût en
+          matière de gouvernance et de conformité (règlement sur l'IA). La régression logistique
+          offre un bon compromis performance / transparence.</p>
+
+          <h3 className="persp-h3">Éviter la suroptimisation</h3>
+          <p>Un modèle qui colle trop aux données passées se dégrade en production. Les garde-fous :
+          séparer l'entraînement et le test <strong>dans le temps</strong> (on teste sur du futur
+          jamais vu, jamais sur un mélange aléatoire), utiliser une validation croisée temporelle,
+          appliquer de la régularisation, et conserver le modèle le plus simple tant qu'un modèle
+          complexe n'a pas prouvé son gain sur des données de test.</p>
+          <p>ESCALE applique déjà le principe le plus important : <strong>figer chaque prédiction et
+          la confronter à du réel jamais vu</strong>. C'est une validation hors échantillon
+          permanente — la meilleure protection contre l'illusion d'un modèle qui aurait l'air bon
+          uniquement parce qu'il a « vu » les réponses.</p>
+        </section>
 
         <section className="doc-section note-honnete">
           <h2>Ce que le site est, et n'est pas</h2>

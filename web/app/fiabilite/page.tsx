@@ -14,18 +14,38 @@ function fmtDate(v: string) {
   return new Date(v).toLocaleString("fr-FR", { timeZone: "Europe/Paris", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-// Justification automatique par vol
+// Justification automatique par vol, avec explication des erreurs
 function justify(p: any): string {
   const facteurs: string[] = [];
   if (p.congestion >= 25) facteurs.push("aéroport saturé sur le créneau");
   if (p.route_hist_delay_min && p.route_hist_delay_min >= 15) facteurs.push("liaison historiquement en retard");
-  const base = facteurs.length ? facteurs.join(" et ") : "peu de facteurs de risque réunis";
-  const reel = p.was_delayed ? `retard réel de ${p.actual_delay_min} min` : `parti à l'heure (${p.actual_delay_min} min)`;
-  const juste = (p.risk_band === "eleve") === p.was_delayed;
-  if (juste && p.risk_band === "eleve") return `Risque élevé (${base}) → confirmé : ${reel}.`;
-  if (juste && p.risk_band !== "eleve") return `Risque ${bandLabel[p.risk_band].toLowerCase()} (${base}) → confirmé : ${reel}.`;
-  if (!juste && p.risk_band === "eleve") return `Risque élevé (${base}), mais ${reel}. Prédiction prudente.`;
-  return `Risque ${bandLabel[p.risk_band].toLowerCase()} (${base}), or ${reel}. Retard non anticipé.`;
+  const aFacteurs = facteurs.length > 0;
+  const base = aFacteurs ? facteurs.join(" et ") : "peu de facteurs de risque réunis";
+  const predEleve = p.risk_band === "eleve";
+  const juste = predEleve === p.was_delayed;
+
+  // Cas 1 — prédit élevé, confirmé en retard : bon appel
+  if (juste && predEleve)
+    return `Risque élevé (${base}) → confirmé : retard réel de ${p.actual_delay_min} min.`;
+
+  // Cas 2 — prédit faible/modéré, parti à l'heure : bon appel
+  if (juste && !predEleve)
+    return `Risque ${bandLabel[p.risk_band].toLowerCase()} (${base}) → confirmé : ${p.actual_delay_min <= 0 ? "à l'heure" : `seulement ${p.actual_delay_min} min`}.`;
+
+  // Cas 3 — FAUSSE ALERTE : prédit élevé, parti à l'heure
+  if (!juste && predEleve)
+    return `Risque élevé prévu (${base}), mais vol parti quasi à l'heure (${p.actual_delay_min} min). ` +
+      `Fausse alerte : les conditions étaient réunies pour un retard qui ne s'est pas matérialisé (créneau absorbé, pas d'effet report).`;
+
+  // Cas 4 — RETARD MANQUÉ : prédit faible/modéré, parti en retard — on explique le facteur manquant
+  const causeProbable =
+    !p.route_hist_delay_min || p.route_hist_delay_min < 15
+      ? "liaison sans historique de retard marqué"
+      : p.congestion < 25
+      ? "créneau peu chargé"
+      : "facteurs connus insuffisants";
+  return `Retard réel de ${p.actual_delay_min} min non anticipé (${causeProbable}). ` +
+    `Cause probable hors du périmètre de données actuel : effet report d'un vol précédent, météo ou contrainte de contrôle aérien — des signaux que le modèle ne capte pas encore.`;
 }
 
 export default async function FiabilitePage() {
