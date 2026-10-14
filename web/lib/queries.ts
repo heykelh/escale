@@ -39,8 +39,10 @@ export async function getLatestMonitoring(): Promise<Monitoring | null> {
 export async function getFlights(
   airport?: string,
   direction?: string,
-  band?: string
+  band?: string,
+  q?: string
 ): Promise<Flight[]> {
+  const term = q ? `%${q.trim()}%` : null;
   return sql<Flight[]>`
     select f.flight_key, f.flight_number, f.airline, f.airport, f.direction,
            f.origin_city, f.dest_city, f.route, f.scheduled_utc, f.delay_min,
@@ -51,7 +53,9 @@ export async function getFlights(
       ${airport ? sql`and f.airport = ${airport}` : sql``}
       ${direction ? sql`and f.direction = ${direction}` : sql``}
       ${band ? sql`and r.risk_band = ${band}` : sql``}
-    order by r.risk_score desc, f.scheduled_utc desc
+      ${term ? sql`and (f.origin_city ilike ${term} or f.dest_city ilike ${term}
+                        or f.flight_number ilike ${term})` : sql``}
+    order by f.scheduled_utc asc
     limit 200`;
 }
 
